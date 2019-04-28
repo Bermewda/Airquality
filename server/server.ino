@@ -1,31 +1,32 @@
 
 #include <ESP8266WiFi.h>
 #define PWM D0
-#define FAN D1                  
-const char* ssid = "ssid";               
-const char* password = "password";     
-unsigned char status_fan = 0;       
-WiFiServer server(80);              
-
+#define FAN D1
+const char* ssid = "ssid";         //Wifi Name
+const char* password = "password"; //Password
+unsigned char status_fan = 0;
+WiFiServer server(80);
+String web = "";
 int gas;
+int status_pwm;
 
 void setup() {
-  Serial.begin(115200);             
+  Serial.begin(115200);
   Serial.println();
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
-  WiFi.begin(ssid, password);           
-  while (WiFi.status() != WL_CONNECTED)     
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
     Serial.print(".");
   }
   Serial.println("");
-  Serial.println("WiFi connected");    
-  server.begin();                   
+  Serial.println("WiFi connected");
+  server.begin();
   Serial.println("Server started");
-  Serial.println(WiFi.localIP());           
+  Serial.println(WiFi.localIP());
 
   pinMode(PWM, INPUT);
   pinMode(FAN, OUTPUT);
@@ -35,8 +36,8 @@ void setup() {
 
 
 void loop() {
-  WiFiClient client = server.available();       
-  if (!client) {            
+  WiFiClient client = server.available();
+  if (!client) {
     return;
   }
 
@@ -45,8 +46,12 @@ void loop() {
   {
     delay(1);
   }
-  String req = client.readStringUntil('\r');        
-  Serial.println(req);              
+
+
+
+
+  String req = client.readStringUntil('\r');
+  Serial.println(req);
   client.flush();
 
 
@@ -54,37 +59,64 @@ void loop() {
   if (req.indexOf("/off") != -1)
   {
     status_fan = 0;
-    digitalWrite(FAN, 0);         
+    digitalWrite(FAN, 0);
     Serial.println("OFF");
   }
   else if (req.indexOf("/on") != -1)
   {
     status_fan = 1;
-    digitalWrite(FAN, 1);       
+    digitalWrite(FAN, 1);
     Serial.println("ON");
   }
-  gas = getPWM();
-  if (gas > 800) {
-    while (gas > 450) {
-      gas = getPWM();
-      digitalWrite(FAN, 1);
-    }
-    digitalWrite(FAN, 0);
-  }
-  
-
 
 
 
   //HTML
-  String web = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
 
-  
+  gas = getPWM();
+  if (gas > 800) {    
+    status_pwm=1;
+  }else{
+    status_pwm=0;
+  }
+  if(status_pwm){
+    digitalWrite(FAN, 1);
+  }else{
+    digitalWrite(FAN, 0);
+  }
+  client.print(Myweb());    //ส่ง HTML Code ไปยัง client
+}
+
+
+int getPWM()
+{
+  //wait for PWM start
+  while (digitalRead(PWM) == LOW);
+  //wait for PWM end
+  long startTime = micros();
+  while (digitalRead(PWM) == HIGH);
+  long duration = micros() - startTime;
+  //from datasheet
+  //CO2 ppm = 5000 * (Th - 2ms) / (Th + Tl - 4ms)
+  //  given Tl + Th = 1004
+  //        Tl = 1004 - Th
+  //        = 5000 * (Th - 2ms) / (Th + 1004 - Th -4ms)
+  //        = 5000 * (Th - 2ms) / 1000 = 2 * (Th - 2ms)
+  long co2ppm = 5 * ((duration / 1000) - 2);
+  Serial.println(co2ppm);
+  return co2ppm;
+}
+
+
+String Myweb() {
+  web = "";
+  web = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+
   web += "<html>\r\n";
   web += "<head>\r\n";
   web += "<style>\r\n";
   web += "body {margin:0;}\r\n";
-  
+
   web += "ul {\r\n";
   web += "  list-style-type: none;\r\n";
   web += "  margin: 0;\r\n";
@@ -95,11 +127,11 @@ void loop() {
   web += "  top: 0;\r\n";
   web += "  width: 100%;\r\n";
   web += "}\r\n";
-  
+
   web += "li {\r\n";
   web += "  float: left;\r\n";
   web += "}\r\n";
-  
+
   web += "li a {\r\n";
   web += "  display: block;\r\n";
   web += "  color: white;\r\n";
@@ -107,7 +139,7 @@ void loop() {
   web += "  padding: 14px 16px;\r\n";
   web += "  font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;\r\n";
   web += "}\r\n";
-  
+
   web += "p {\r\n";
   web += "    background-color: whitesmoke;\r\n";
   web += "    padding: 50px;\r\n";
@@ -117,9 +149,9 @@ void loop() {
   web += "    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;\r\n";
   web += "    box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);\r\n";
   web += "    display:inline-block;\r\n";
-      
+
   web += "}\r\n";
-  
+
   web += "#btn1{\r\n";
   web += "    background-color: #4CAF50;\r\n";
   web += "    color: white;\r\n";
@@ -142,7 +174,7 @@ void loop() {
   web += "    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;\r\n";
   web += "    cursor: pointer;\r\n";
   web += "}\r\n";
-  
+
   web += "#btn1:active{\r\n";
   web += "    background-color: whitesmoke;\r\n";
   web += "    color: lightgray;\r\n";
@@ -154,7 +186,7 @@ void loop() {
   web += "    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;\r\n";
   web += "    cursor: pointer;\r\n";
   web += "}\r\n";
-  
+
   web += "#btn2{\r\n";
   web += "    background-color: #ff6666;\r\n";
   web += "    color: white;\r\n";
@@ -177,7 +209,7 @@ void loop() {
   web += "    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;\r\n";
   web += "    cursor: pointer;\r\n";
   web += "}\r\n";
-  
+
   web += "#btn2:active{\r\n";
   web += "    background-color: whitesmoke;\r\n";
   web += "    color: lightgray;\r\n";
@@ -192,7 +224,7 @@ void loop() {
   web += "</style>\r\n";
   web += "<meta http-equiv=\"refresh\" content=\"5\">\r\n";
   web += "</head>\r\n";
-  
+
   web += "<body style=\"background-color:gainsboro\">\r\n";
   web += "<ul>\r\n";
   web += "  <li><a> DASHBOARD </a></li>\r\n";
@@ -200,7 +232,9 @@ void loop() {
   web += "<br><br><br>\r\n";
   web += "<center><p>";
   web += "<b>Cabondioxide</b><br>";
+
   web += gas;
+
   web += " ppm</p></center>\r\n";
   web += "<center><p>FAN<br>\r\n";
   web += "<a href=\"/on\"><button id=\"btn1\">ON</button></a>\r\n";
@@ -208,26 +242,5 @@ void loop() {
   web += "</p></center>\r\n";
   web += "</body>\r\n";
   web += "</html>\r\n";
-
-  client.print(web);    //ส่ง HTML Code ไปยัง client
-}
-
-
-int getPWM()
-{
-  //wait for PWM start
-  while (digitalRead(PWM) == LOW);
-  //wait for PWM end
-  long startTime = micros();
-  while (digitalRead(PWM) == HIGH);
-  long duration = micros() - startTime;
-  //from datasheet
-  //CO2 ppm = 5000 * (Th - 2ms) / (Th + Tl - 4ms)
-  //  given Tl + Th = 1004
-  //        Tl = 1004 - Th
-  //        = 5000 * (Th - 2ms) / (Th + 1004 - Th -4ms)
-  //        = 5000 * (Th - 2ms) / 1000 = 2 * (Th - 2ms)
-  long co2ppm = 5 * ((duration / 1000) - 2);
-  Serial.println(co2ppm);
-  return co2ppm;
+  return web;
 }
